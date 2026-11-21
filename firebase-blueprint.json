@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated creator profile and workspace defaults stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["starter", "pro", "studio"]
+        },
+        "defaultLanguage": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "defaultAspectRatio": {
+          "type": "string",
+          "enum": ["9:16", "16:9", "1:1"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "plan", "createdAt", "updatedAt"]
+    },
+    "UserProjectMirror": {
+      "title": "UserProjectMirror",
+      "description": "Synced summary of a creator's AI video clipping project and pipeline status.",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "integer"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["upload", "youtube", "sample"]
+        },
+        "outputFormat": {
+          "type": "string",
+          "enum": ["9:16", "16:9", "1:1"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["queued", "ingesting", "transcribing", "analyzing", "rendering", "completed", "failed"]
+        },
+        "progress": {
+          "type": "integer"
+        },
+        "clipCount": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "projectId",
+        "userId",
+        "title",
+        "sourceType",
+        "outputFormat",
+        "status",
+        "progress",
+        "clipCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private creator account settings isolated per authenticated UID."
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/UserProjectMirror" },
+      "description": "Creator-owned video clipping project status mirrors linked to PostgreSQL records."
+    }
+  }
+}

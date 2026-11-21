@@ -1,0 +1,176 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all unspecified paths by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'kodapekartik2005@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'plan', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'plan',
+          'defaultLanguage',
+          'defaultAspectRatio',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid == request.auth.uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
+        data.plan in ['starter', 'pro', 'studio'] &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120)) &&
+        (!('defaultLanguage' in data) || (data.defaultLanguage is string && data.defaultLanguage.size() <= 16)) &&
+        (!('defaultAspectRatio' in data) || data.defaultAspectRatio in ['9:16', '16:9', '1:1']) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProjectMirror(data) {
+      return data.keys().hasAll([
+          'projectId',
+          'userId',
+          'title',
+          'sourceType',
+          'outputFormat',
+          'status',
+          'progress',
+          'clipCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'projectId',
+          'userId',
+          'title',
+          'sourceType',
+          'outputFormat',
+          'status',
+          'progress',
+          'clipCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.projectId is int && data.projectId > 0 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.userId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.userId == request.auth.uid &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.sourceType in ['upload', 'youtube', 'sample'] &&
+        data.outputFormat in ['9:16', '16:9', '1:1'] &&
+        data.status in ['queued', 'ingesting', 'transcribing', 'analyzing', 'rendering', 'completed', 'failed'] &&
+        data.progress is int && data.progress >= 0 && data.progress <= 100 &&
+        data.clipCount is int && data.clipCount >= 0 && data.clipCount <= 50 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isSignedIn() && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) &&
+        isValidUser(incoming()) &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().uid == existing().uid &&
+            incoming().email == existing().email &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName',
+              'plan',
+              'defaultLanguage',
+              'defaultAspectRatio',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+
+      match /projects/{projectId} {
+        allow get: if isValidId(userId) && isValidId(projectId) && (isOwner(userId) || isAdmin());
+        allow list: if isValidId(userId) && isSignedIn() && existing().userId == request.auth.uid;
+        allow create: if isValidId(userId) &&
+          isValidId(projectId) &&
+          isOwner(userId) &&
+          isValidProjectMirror(incoming()) &&
+          incoming().userId == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+        allow update: if isValidId(userId) &&
+          isValidId(projectId) &&
+          isValidProjectMirror(incoming()) &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              existing().status != 'completed' &&
+              incoming().userId == existing().userId &&
+              incoming().projectId == existing().projectId &&
+              incoming().sourceType == existing().sourceType &&
+              incoming().outputFormat == existing().outputFormat &&
+              incoming().createdAt == existing().createdAt &&
+              incoming().updatedAt == request.time &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'title',
+                'status',
+                'progress',
+                'clipCount',
+                'updatedAt'
+              ]) &&
+              exists(/databases/$(database)/documents/users/$(userId)) &&
+              get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid
+            )
+          );
+        allow delete: if isValidId(userId) && isValidId(projectId) && (isOwner(userId) || isAdmin());
+      }
+    }
+  }
+}

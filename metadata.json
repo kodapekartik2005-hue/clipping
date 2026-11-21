@@ -1,0 +1,6 @@
+{
+  "name": "ClipGenius AI",
+  "description": "AI-powered video clipping platform that automatically converts long-form videos and YouTube links into short-form clips with synchronized animated captions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
